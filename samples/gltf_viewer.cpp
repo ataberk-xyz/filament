@@ -831,7 +831,11 @@ int main(int argc, char** argv) {
         createGroundPlane(engine, scene, app);
         createOverdrawVisualizerEntities(engine, scene, app);
 
-        app.viewer->setUiCallback([&app, scene, view, engine] () {
+        // Instantiate point lights loaded from settings file
+        app.automationEngine->updateCustomLights(engine, app.viewer->getSettings().lighting.lights,
+                scene);
+
+        app.viewer->setUiCallback([&app, scene, view, engine]() {
             auto& automation = *app.automationEngine;
 
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
