@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2026 The Android Open Source Project
+ * Copyright (C) 2026 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -183,6 +183,7 @@ SingleInstanceComponentManagerBase::addComponentImpl(Entity const e, void* conte
         SoaAllocator const allocator) noexcept {
     Instance ci = 0;
     if (!e.isNull()) {
+        resume();
         if (isAmortizationSupported()) {
             checkZombieCollisionPanic(e);
         }
@@ -223,16 +224,18 @@ void SingleInstanceComponentManagerBase::removeComponentsImpl(Entity const* enti
             notifyChange(e);
         }
     }
+    if (mEntities.empty()) {
+        suspend();
+    }
 }
 
 SingleInstanceComponentManagerBase::SingleInstanceComponentManagerBase(EntityManager& em, ImmutableCString name,
         bool const amortizationSupported) noexcept
         : mEntityManager(em), mName(std::move(name)), mAmortizationSupported(amortizationSupported) {
-    mEntityManager.registerWatermark(&mWatermark, mName);
 }
 
 SingleInstanceComponentManagerBase::~SingleInstanceComponentManagerBase() noexcept {
-    mEntityManager.unregisterWatermark(&mWatermark);
+    suspend();
 }
 
 SingleInstanceComponentManagerBase::SingleInstanceComponentManagerBase(SingleInstanceComponentManagerBase&& rhs) noexcept
@@ -248,13 +251,16 @@ SingleInstanceComponentManagerBase::SingleInstanceComponentManagerBase(SingleIns
           mChangeCallbacks(std::move(rhs.mChangeCallbacks)),
           mBitsets(std::move(rhs.mBitsets)) {
     std::copy_n(rhs.mDirtyEntities, rhs.mDirtyCount, mDirtyEntities);
+    mSuspended = rhs.mSuspended;
     mWatermark.store(rhs.mWatermark.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    mEntityManager.rebindWatermark(&rhs.mWatermark, &mWatermark, mName);
+    if (!mSuspended) {
+        mEntityManager.rebindWatermark(&rhs.mWatermark, &mWatermark, mName, &mEntities);
+    }
 }
 
 SingleInstanceComponentManagerBase& SingleInstanceComponentManagerBase::operator=(SingleInstanceComponentManagerBase&& rhs) noexcept {
     if (UTILS_LIKELY(this != &rhs)) {
-        mEntityManager.unregisterWatermark(&mWatermark);
+        suspend();
 
         mEntities = std::move(rhs.mEntities);
         mPendingDestruction = std::move(rhs.mPendingDestruction);
@@ -267,8 +273,11 @@ SingleInstanceComponentManagerBase& SingleInstanceComponentManagerBase::operator
         mChangeCallbacks = std::move(rhs.mChangeCallbacks);
         mBitsets = std::move(rhs.mBitsets);
         std::copy_n(rhs.mDirtyEntities, rhs.mDirtyCount, mDirtyEntities);
+        mSuspended = rhs.mSuspended;
         mWatermark.store(rhs.mWatermark.load(std::memory_order_relaxed), std::memory_order_relaxed);
-        mEntityManager.rebindWatermark(&rhs.mWatermark, &mWatermark, mName);
+        if (!mSuspended) {
+            mEntityManager.rebindWatermark(&rhs.mWatermark, &mWatermark, mName, &mEntities);
+        }
     }
     return *this;
 }

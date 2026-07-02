@@ -155,7 +155,10 @@ public:
      *    Typically, @p suspend() is called when the associated scene, world, or render context is inactive or shutdown.
      */
     void suspend() noexcept {
-        mEntityManager.unregisterWatermark(&mWatermark);
+        if (!mSuspended) {
+            mEntityManager.unregisterWatermark(&mWatermark);
+            mSuspended = true;
+        }
     }
 
     /**
@@ -166,7 +169,10 @@ public:
      * on all missed garbage epochs that are still present on the timeline.
      */
     void resume() noexcept {
-        mEntityManager.registerWatermark(&mWatermark);
+        if (mSuspended) {
+            mEntityManager.registerWatermark(&mWatermark, mName, &mEntities);
+            mSuspended = false;
+        }
     }
 
     ImmutableCString const& getName() const noexcept { return mName; }
@@ -235,6 +241,7 @@ private:
     EntityManager& mEntityManager;
     ImmutableCString mName;
     bool mAmortizationSupported = false;
+    bool mSuspended = true;
     PagedArenaBitset mCollapsedGarbage;
     std::atomic<uint64_t> mWatermark{0};
     std::vector<const PagedArenaBitset*> mMissedGarbage;
@@ -604,6 +611,6 @@ void SingleInstanceComponentManager<Elements ... >::removeComponents(Entity cons
     removeComponentsHelper(entities, count);
 }
 
-} // namespace filament
+} // namespace utils
 
 #endif // TNT_UTILS_SINGLEINSTANCECOMPONENTMANAGER_H
